@@ -21,9 +21,22 @@ pub fn ArrayVec(comptime T: type, comptime N: usize) type {
             return self._len;
         }
 
+        fn capacity(self: *const Self) usize {
+            return Capacity;
+        }
+
+        fn as_slice(self: *const Self) []const T {
+            return self.array[0..self.len()];
+        }
+
+        fn as_slice_mut(self: *Self) []T {
+            return self.array[0..self.len()];
+        }
+
         fn remaining_capacity(self: *const Self) usize {
             return Capacity - self.len();
         }
+
         fn push(self: *Self, element: T) void {
             return self.try_push(element) catch unreachable;
         }
@@ -68,6 +81,35 @@ pub fn ArrayVec(comptime T: type, comptime N: usize) type {
             std.mem.copy(T, self.array[self_len..], other);
             self.set_len(self_len + other_len);
         }
+
+        fn iter(self: *const Self) type {
+            return struct {
+                ptr: *const T,
+                end: *const T,
+
+                const Iter = @This();
+                
+                fn post_inc_start(this: *Iter, offset: isize) *const T {
+                    // oh well, zero sized types :3
+                    if (comptime @sizeOf(T) == 0) {
+                        this.end = @intToPtr(*const T, (@ptrToInt(this.end)) +% -offset);
+                        return this.ptr;
+                    } else {
+                        var old = this.ptr;
+                        this.ptr = @intToPtr(*const T, @ptrToInt(this.end) + 1);
+                        return old;
+                    }
+                }
+
+                pub fn next(this: *Iter) ?*const T {
+                    if (this.ptr == this.end) {
+                        return null;
+                    } else {
+                        return this.post_inc_start(1);
+                    }
+                }
+            };
+        }
     };
 }
 
@@ -80,6 +122,7 @@ test "arrayvec push" {
     comptime vec.push(4);
 
     comptime debug.assert(vec.len() == 4);
+    comptime debug.assert(std.mem.eql(i32, vec.as_slice(), [4]i32 {1, 2, 3, 4}));
 }
 
 test "arrayvec pop" {
@@ -97,7 +140,8 @@ test "arrayvec pop" {
     comptime debug.assert(vec.pop().? == 1);
     comptime debug.assert(vec.pop() == null);
 
-    comptime debug.assert(vec.len() == 0);    
+    comptime debug.assert(vec.len() == 0);
+    comptime debug.assert(std.mem.eql(i32, vec.as_slice(), [0]i32 {}));
 }
 
 test "extend from slice" {
@@ -111,6 +155,14 @@ test "extend from slice" {
 
     comptime debug.assert(vec.len() == 10);
 
-    comptime debug.assert(vec.pop().? == 10);
-    
+    comptime debug.assert(vec.pop().? == 10);   
+}
+
+test "iter" {
+    comptime var vec = comptime ArrayVec(i32, 10).init();
+    comptime var array = [10]i32 {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    comptime vec.try_extend_from_slice(&array) catch unreachable;
+    comptime var iter = vec.iter();
+
+    comptime debug.assert(iter.next().? == 1);
 }
