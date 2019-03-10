@@ -113,7 +113,7 @@ pub fn ArrayVec(comptime T: type, comptime N: usize) type {
             var start: *const T = &self.array[0];
             var offset = @ptrToInt(start) + self.len();
 
-            const end = @intToPtr(*const T, offset);
+            var end = @intToPtr(*const T, offset);
             return build_iter(*const T).init(start, end);
         }
     };
@@ -142,7 +142,7 @@ fn build_iter(comptime T: type) type {
             }
         }
 
-        fn next(this: *Self) T {
+        fn next(this: *Self) ?T {
             if (this.ptr == this.end) {
                 return null;
             } else {
@@ -205,11 +205,11 @@ test "extend from slice" {
 }
 
 test "iter" {
-    comptime {
+
         var vec = ArrayVec(i32, 10).init();
         var array = [10]i32 {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-        vec.try_extend_from_slice(&array) catch unreachable;
+        _ = vec.try_extend_from_slice(&array) catch unreachable;
         var iter = vec.iter();
         var nxt = iter.next();
-    }
+    
 }
