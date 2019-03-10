@@ -82,44 +82,23 @@ pub fn ArrayVec(comptime T: type, comptime N: usize) type {
             self.set_len(self_len + other_len);
         }
 
-        fn iter(self: *const Self) type {
-            // return struct {
-            //     ptr: *const T,
-            //     end: *const T,
+        fn iter(self: *const Self) build_iter(*const T, @sizeOf(T)) {
+            const start: *const T = &self.array[0];
+            const offset = @ptrToInt(start) + (self.len() * @sizeOf(T));
+            const end = @intToPtr(*const T, offset);
+            return build_iter(*const T, @sizeOf(T)).init(start, end);
+        }
 
-            //     const Iter = @This();
-                
-            //     fn post_inc_start(this: *Iter, offset: isize) *const T {
-            //         // oh well, zero sized types :3
-            //         if (comptime @sizeOf(T) == 0) {
-            //             this.end = @intToPtr(*const T, (@ptrToInt(this.end)) +% -offset);
-            //             return this.ptr;
-            //         } else {
-            //             var old = this.ptr;
-            //             this.ptr = @intToPtr(*const T, @ptrToInt(this.end) + 1);
-            //             return old;
-            //         }
-            //     }
-
-            //     fn next(this: *Iter) ?*const T {
-            //         if (this.ptr == this.end) {
-            //             return null;
-            //         } else {
-            //             return this.post_inc_start(1);
-            //         }
-            //     }
-            // };
-
-            var start: *const T = &self.array[0];
-            var offset = @ptrToInt(start) + self.len();
-
-            var end = @intToPtr(*const T, offset);
-            return build_iter(*const T).init(start, end);
+        fn iter_mut(self: *Self) build_iter(*T, @sizeOf(T)) {
+            const start: *T = &self.array[0];
+            const offset = @ptrToInt(start) + (self.len() * @sizeOf(T));
+            const end = @intToPtr(*T, offset);
+            return build_iter(*T, @sizeOf(T)).init(start, end);
         }
     };
 }
 
-fn build_iter(comptime T: type) type {
+fn build_iter(comptime T: type, comptime SIZE: isize) type {
     return struct {
         ptr: T,
         end: T,
@@ -137,7 +116,7 @@ fn build_iter(comptime T: type) type {
                 return this.ptr;
             } else {
                 var old = this.ptr;
-                this.ptr = @intToPtr(T, @ptrToInt(this.end) + 1);
+                this.ptr = @intToPtr(T, @ptrToInt(this.ptr) + @intCast(usize, offset));
                 return old;
             }
         }
@@ -146,7 +125,7 @@ fn build_iter(comptime T: type) type {
             if (this.ptr == this.end) {
                 return null;
             } else {
-                return this.post_inc_start(1);
+                return this.post_inc_start(SIZE);
             }
         }
     };
@@ -205,11 +184,34 @@ test "extend from slice" {
 }
 
 test "iter" {
-
-        var vec = ArrayVec(i32, 10).init();
-        var array = [10]i32 {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    //comptime {
+        var vec = ArrayVec(i32, 5).init();
+        var array = [5]i32 {1, 2, 3, 4, 5};
         _ = vec.try_extend_from_slice(&array) catch unreachable;
+        std.debug.assert(vec.len() == 5);
         var iter = vec.iter();
-        var nxt = iter.next();
-    
+
+        debug.assert(iter.next().?.* == 1);
+        debug.assert(iter.next().?.* == 2);
+        debug.assert(iter.next().?.* == 3);
+        debug.assert(iter.next().?.* == 4);
+        debug.assert(iter.next().?.* == 5);
+        debug.assert(iter.next() == null);
+    //}
+}
+
+test "iter mut" {
+    //comptime {
+        var vec = ArrayVec(i32, 5).init();
+        var array = [5]i32 {1, 2, 3, 4, 5};
+        _ = vec.try_extend_from_slice(&array) catch unreachable;
+        std.debug.assert(vec.len() == 5);
+        var iter = vec.iter_mut();
+
+        while (iter.next()) |item| {
+            item.* += 1;
+        }
+
+        debug.assert(std.mem.eql(i32, vec.as_slice(), [5]i32 {2, 3, 4, 5, 6}));
+    //}
 }
