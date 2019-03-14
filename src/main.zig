@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const debug = std.debug;
 
 const ArrayError = error {
@@ -71,61 +72,105 @@ pub fn ArrayVec(comptime T: type, comptime N: usize) type {
         }
 
         fn try_extend_from_slice(self: *Self, other: []const T) !void {
+            
             if (self.remaining_capacity() < other.len) {
                 return ArrayError.CapacityError;
             }
-
+            
             var self_len = self.len();
             var other_len = other.len;
-
+            
             std.mem.copy(T, self.array[self_len..], other);
             self.set_len(self_len + other_len);
         }
 
-        fn iter(self: *const Self) build_iter(*const T, @sizeOf(T)) {
-            const start: *const T = &self.array[0];
-            const offset = @ptrToInt(start) + (self.len() * @sizeOf(T));
-            const end = @intToPtr(*const T, offset);
-            return build_iter(*const T, @sizeOf(T)).init(start, end);
+        fn iter(self: *const Self) build_iter([*]const T, *const T) {
+            const start = self.array[0..].ptr;
+            const end = self.array[self.len()..].ptr;
+            return build_iter([*]const T, *const T).init(start, end);
         }
 
-        fn iter_mut(self: *Self) build_iter(*T, @sizeOf(T)) {
-            const start: *T = &self.array[0];
-            const offset = @ptrToInt(start) + (self.len() * @sizeOf(T));
-            const end = @intToPtr(*T, offset);
-            return build_iter(*T, @sizeOf(T)).init(start, end);
+        fn iter_mut(self: *Self) build_iter([*]T, *T) {
+            const start = self.array[0..].ptr;
+            const end = self.array[self.len()..].ptr;
+            return build_iter([*]T, *T).init(start, end);
         }
     };
 }
 
-fn build_iter(comptime T: type, comptime SIZE: isize) type {
+/// Returns the mutability of pointer type `T`, but for `R`.
+/// *const T will return *const R,
+/// *T returns *R.
+fn mutability_of(comptime T: type, comptime R: type) type {
+    switch (@typeInfo(T)) {
+        builtin.TypeId.Pointer => |p| {
+            if (p.is_const) {
+                return *R;
+            } else {
+                return *const R;
+            }
+        },
+        else => @compileError("nope"),
+    }
+}
+
+
+/// Returns the mutability of pointer type `T`, but for a slice of `T`.
+/// *const T will return []const T,
+/// *T will return []T.
+fn mutability_of_slice(comptime T: type) type {
+    switch (@typeInfo(T)) {
+        builtin.TypeId.Pointer => |p| {
+            if (p.is_const) {
+                return []const p.child;
+            } else {
+                return []p.child;
+            }
+        },
+        else => @compileError("nope"),
+    }
+}
+
+fn build_iter(comptime T: type, comptime Item: type) type {
+     
     return struct {
         ptr: T,
         end: T,
 
         const Self = @This();
-        
+
         fn init(start_ptr: T, end_ptr: T) Self {
             return Self { .ptr = start_ptr, .end = end_ptr};
         }
 
-        fn post_inc_start(this: *Self, offset: isize) T {
-            // oh well, zero sized types :3
-            if (comptime @sizeOf(T) == 0) {
-                this.end = @intToPtr(T, (@ptrToInt(this.end)) +% -offset);
-                return this.ptr;
-            } else {
-                var old = this.ptr;
-                this.ptr = @intToPtr(T, @ptrToInt(this.ptr) + @intCast(usize, offset));
-                return old;
-            }
+        fn as_slice(self: mutability_of(T, Self)) mutability_of_slice(T) {
+            var end_num: usize = @ptrToInt(self.end);
+            var ptr_num: usize = @ptrToInt(self.ptr);
+
+            comptime var size_of_t = switch (@typeInfo(Item)) {
+                builtin.TypeId.Pointer => |p| blk: {
+                    break :blk @sizeOf(p.child);
+                },
+                else => unreachable,
+            };
+
+            // BE CAREFULL. DEVIDE BY THE SIZE OF THE POINTED TO TYPE
+            const len = (end_num -% ptr_num) / size_of_t;
+            return self.ptr[0..len];
         }
 
-        fn next(this: *Self) ?T {
-            if (this.ptr == this.end) {
+        fn post_inc_start(self: *Self, offset: isize) Item {
+
+            var old = self.ptr;
+            self.ptr = self.ptr + @intCast(usize, offset);
+            return &old[0];
+        }
+
+        fn next(self: *Self) ?Item {
+             if (self.ptr == self.end) {
                 return null;
             } else {
-                return this.post_inc_start(SIZE);
+                return self.post_inc_start(1);
             }
         }
     };
@@ -213,5 +258,18 @@ test "iter mut" {
         }
 
         debug.assert(std.mem.eql(i32, vec.as_slice(), [5]i32 {2, 3, 4, 5, 6}));
+    //}
+}
+
+test "iter as slice" {
+    //comptime {
+        var vec = ArrayVec(i32, 5).init();
+        var array = [5]i32 {1, 2, 3, 4, 5};
+        _ = vec.try_extend_from_slice(&array) catch unreachable;
+        std.debug.assert(vec.len() == 5);
+        var iter = vec.iter();
+
+       var slice = iter.as_slice();
+       std.debug.assert(slice.len == 5);
     //}
 }
