@@ -6,6 +6,12 @@ const ArrayError = error {
     CapacityError,
 };
 
+fn av_from_slice(comptime T: type, comptime slice: []T) ArrayVec(T, slice.len) {
+    comptime var array = ArrayVec(T, slice.len).init();
+    _ = array.try_extend_from_slice(slice);
+    return array;
+}
+
 pub fn ArrayVec(comptime T: type, comptime N: usize) type {
     return struct {
         array: [N]T,
@@ -95,6 +101,39 @@ pub fn ArrayVec(comptime T: type, comptime N: usize) type {
             const end = self.array[self.len()..].ptr;
             return build_iter([*]T, *T).init(start, end);
         }
+
+        fn into_iter(self: Self) into_iterator(T, N) {
+            return into_iterator(T, N).init(self);
+        }
+
+        fn deinit_with(self: *Self, drop_fn: fn(T) void) void {
+            for (self.array[0..self._len]) |element| {
+                drop_fn(element);
+            }
+        }
+    };
+}
+
+fn into_iterator(comptime T: type, comptime N: usize) type {
+    return struct {
+        array: ArrayVec(T, N),
+        index: usize,
+
+        const Self = @This();
+
+        fn init(a: ArrayVec(T, N)) Self {
+            return Self {.array = a, .index = 0};
+        }
+
+        fn next(self: *Self) ?T {
+            if (self.index == self.array._len) {
+                return null;
+            } else {
+                var idx = self.index;
+                self.index += 1;
+                return self.array.array[idx];
+            }
+        }
     };
 }
 
@@ -105,9 +144,9 @@ fn mutability_of(comptime T: type, comptime R: type) type {
     switch (@typeInfo(T)) {
         builtin.TypeId.Pointer => |p| {
             if (p.is_const) {
-                return *R;
-            } else {
                 return *const R;
+            } else {
+                return *R;
             }
         },
         else => @compileError("nope"),
@@ -271,5 +310,39 @@ test "iter as slice" {
 
        var slice = iter.as_slice();
        std.debug.assert(slice.len == 5);
+
+       var mutiter = vec.iter_mut();
+       var mutslice = mutiter.as_slice();
+       mutslice[0] = 0;
+
+       debug.assert(std.mem.eql(i32, vec.as_slice(), [5]i32 {0, 2, 3, 4, 5} ));
     //}
+}
+
+test "ino iter" {
+    comptime {
+        var vec = ArrayVec(i32, 5).init();
+        var array = [5]i32 {1, 2, 3, 4, 5};
+        _ = vec.try_extend_from_slice(array);
+
+        var iter = vec.into_iter();
+
+        debug.assert(iter.next().? == 1);
+        debug.assert(iter.next().? == 2);
+        debug.assert(iter.next().? == 3);
+        debug.assert(iter.next().? == 4);
+        debug.assert(iter.next().? == 5);
+        debug.assert(iter.next() == null);
+
+        var it = vec.into_iter();
+    }
+}
+
+test "av_from_slice" {
+    comptime {
+        var arr = [5]i32 {1, 2, 3, 4, 5};
+        var v = av_from_slice(i32, &arr);
+        debug.assert(v.len() == 5);
+        debug.assert(v.capacity() == 5);
+    }
 }
