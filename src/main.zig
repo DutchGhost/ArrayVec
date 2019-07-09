@@ -8,7 +8,7 @@ const ArrayError = error {
 
 fn av_from_slice(comptime T: type, comptime slice: []T) ArrayVec(T, slice.len) {
     comptime var array = ArrayVec(T, slice.len).init();
-    _ = array.try_extend_from_slice(slice);
+    var x = array.try_extend_from_slice(slice);
     return array;
 }
 
@@ -268,7 +268,7 @@ test "extend from slice" {
 }
 
 test "iter" {
-    //comptime {
+    comptime {
         var vec = ArrayVec(i32, 5).init();
         var array = [5]i32 {1, 2, 3, 4, 5};
         _ = vec.try_extend_from_slice(&array) catch unreachable;
@@ -281,7 +281,7 @@ test "iter" {
         debug.assert(iter.next().?.* == 4);
         debug.assert(iter.next().?.* == 5);
         debug.assert(iter.next() == null);
-    //}
+    }
 }
 
 test "iter mut" {
@@ -323,7 +323,7 @@ test "ino iter" {
     comptime {
         var vec = ArrayVec(i32, 5).init();
         var array = [5]i32 {1, 2, 3, 4, 5};
-        _ = vec.try_extend_from_slice(array);
+        var x = vec.try_extend_from_slice(array);
 
         var iter = vec.into_iter();
 
