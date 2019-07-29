@@ -9,30 +9,30 @@ const ArrayError = error {
 };
 
 /// [V] new() -> Self
-/// [V] len(self: *const Self) -> usize
-/// [V] capacity(self: *const Self) -> usize
-/// [V] is_full(self: *const Self) -> bool
-/// [V] remaining_capacity(self: *const Self) -> usize
+/// [V] len(self: Self) -> usize
+/// [V] capacity(self: Self) -> usize
+/// [V] is_full(self: Self) -> bool
+/// [V] remaining_capacity(self: Self) -> usize
 /// [V] push(self: *Self, element: T) void
 /// [V] try_push(self: *Self) !void
 /// [V] push_unchecked(self: *Self): void
-/// [X] insert(self: *Self, index: usize, element: T) void
+/// [V] insert(self: *Self, index: usize, element: T) void
 /// [X] try_insert(self: *Self, index: usize, element: T) !void
-/// [?] pop(self: *Self) ?T
-/// [X] swap_remove(self: *Self, index: usize) T
-/// [X] swap_pop(self: *Self, index: usize) ?T
-/// [X] remove(self: *Self, index: usize) T
-/// [X] pop_at(self: *Self, index: usize) ?T
-/// [X] truncate(self: *Self, new_len: usize) void
-/// [X] clear(self: *Self) void
-/// [X] retain(self: *Self, f: fn(*T) -> bool) void
+/// [V] pop(self: *Self) ?T
+/// [V] swap_remove(self: *Self, index: usize) T
+/// [V] swap_pop(self: *Self, index: usize) ?T
+/// [V] remove(self: *Self, index: usize) T
+/// [V] pop_at(self: *Self, index: usize) ?T
+/// [V] truncate(self: *Self, new_len: usize) void
+/// [V] clear(self: *Self) void
+/// [V] retain(self: *Self, f: fn(*T) -> bool) void
 /// [V] set_len(self: *Self, new_len: usize) void
-/// [X] try_extend_from_slice(self: *Self, other: []T) !void
-/// [X] drain(self: *Self, start: usize, end: usize) Drain(T),
-/// [X] into_inner(self: Self) -> [SIZE]T
-/// [X] dispose(self: Self) void
-/// [X] as_slice(self: *const Self) []const T
-/// [X] as_mut_slice(self: *Self) []T
+/// [V] try_extend_from_slice(self: *Self, other: []T) !void
+/// [V] drain(self: *Self, start: usize, end: usize) Drain(T),
+/// [V] into_inner(self: Self) -> [SIZE]T
+/// [V] dispose(self: Self) void
+/// [V] as_slice(self: Self) []const T
+/// [V] as_mut_slice(self: *Self) []T
 pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
     return struct {
         array: [SIZE]T,
@@ -48,31 +48,33 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
         }
 
         /// Returns the length of the ArrayVec.
-        pub fn len(self: *const Self) usize {
+        pub fn len(self: Self) usize {
             return self.length;
         }
 
         /// Returns the capacity of the ArrayVec.
-        pub fn capacity(self: *const Self) usize {
+        pub fn capacity(self: Self) usize {
             return SIZE;
         }
 
-        pub fn is_full(self: *const Self) bool {
+        pub fn is_full(self: Self) bool {
             return self.len() == self.capacity();
         }
 
-        pub fn is_empty(self: *const Self) bool {
+        pub fn is_empty(self: Self) bool {
             return self.len() == 0;
         }
 
-        pub fn remaining_capacity(self: *const Self) usize {
+        pub fn remaining_capacity(self: Self) usize {
             return self.capacity() - self.len();
         }
 
         /// Pushes `element` onto the array.
         /// Panic's if the array was already full.
         pub fn push(self: *Self, element: T) void {
-            self.try_push(element) catch unreachable;
+            self.try_push(element) catch {
+                @panic("ArrayVec.push failed: Out of Capacity.");
+            };
         }
 
         /// Pushes `element` onto the array.
@@ -224,7 +226,7 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             self.clear();
         }
 
-        pub fn as_slice(self: *const Self) []const T {
+        pub fn as_slice(self: Self) []const T {
             return self.array[0..self.len()];
         }
 
@@ -518,8 +520,6 @@ test "const remove" {
 }
 
 test "const retain" {
-   
-
     comptime {
 
         const bigger_than_5 = struct { fn bigger_than_5(x: *i32) bool { return x.* > 5;} }.bigger_than_5;
