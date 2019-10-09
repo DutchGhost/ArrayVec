@@ -4,18 +4,16 @@ const mem = std.mem;
 const debug = std.debug;
 
 /// An errorset for an ArrayVec
-const ArrayError = error {
-    CapacityError,
-};
+const ArrayError = error{CapacityError};
 
 /// [V] new() -> Self
 /// [V] len(self: Self) -> usize
 /// [V] capacity(self: Self) -> usize
 /// [V] is_full(self: Self) -> bool
-/// [V] remaining_capacity(self: Self) -> usize
+/// [V] remaining_capacity(self: Self) usize
 /// [V] push(self: *Self, element: T) void
 /// [V] try_push(self: *Self) !void
-/// [V] push_unchecked(self: *Self): void
+/// [V] push_unchecked(self: *Self) void
 /// [V] insert(self: *Self, index: usize, element: T) void
 /// [X] try_insert(self: *Self, index: usize, element: T) !void
 /// [V] pop(self: *Self) ?T
@@ -41,36 +39,82 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
         const Self = @This();
 
         /// Returns a new empty ArrayVec.
+        /// # Examples
+        /// ```
+        /// var array = ArrayVec(i32, 10).new();
+        /// ```
         pub fn new() Self {
-            return Self {
-                .array = undefined, .length = comptime_int(0),
+            return Self{
+                .array = undefined,
+                .length = comptime_int(0),
             };
         }
 
         /// Returns the length of the ArrayVec.
+        /// # Examples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 10).new();
+        /// arrayvec.push(10);
+        /// arrayvec.push(20);
+        /// debug.assert(arrayvec.len() == 2);
+        /// ```
         pub fn len(self: Self) usize {
             return self.length;
         }
 
         /// Returns the capacity of the ArrayVec.
+        /// # Examples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 10).new();
+        /// debug.assert(arrayvec.capacity() == 10);
+        /// ```
         pub fn capacity(self: Self) usize {
             return SIZE;
         }
 
+        /// Returns whether the ArrayVec is full (i.e, no more items can be pushed onto it.)
+        /// # Examples
+        /// ```
+        /// // an arrayvec with a capacity of 0 is always full!
+        /// var arrayvec = ArrayVec(i32, 0);
+        /// debug.assert(arrayvec.is_full());
+        /// ```
         pub fn is_full(self: Self) bool {
             return self.len() == self.capacity();
         }
 
+        /// Returns whether the ArrayVec is empty.
+        /// # Examples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 100);
+        /// debug.assert(arrayvec.is_empty());
+        /// ```
         pub fn is_empty(self: Self) bool {
             return self.len() == 0;
         }
 
+        /// Returns the remaining capacity of the ArrayVec. This is the number of items that can be pushed onto it before the ArrayVec is full. (see ArrayVec.is_full()).
+        /// # Examples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 5).new();
+        /// arrayvec.push(10);
+        /// arrayvec.push(20);
+        /// // The capacity was 5, we pushed 2 items, so we can push 3 more.
+        /// debug.assert(arrayvec.remaining_capacity() == 3);
+        /// ```
         pub fn remaining_capacity(self: Self) usize {
             return self.capacity() - self.len();
         }
 
         /// Pushes `element` onto the array.
         /// Panic's if the array was already full.
+        /// # Examples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 10);
+        /// arrayvec.push(10);
+        /// arrayvec.push(20);
+        /// arrayvec.push(30);
+        /// ```
         pub fn push(self: *Self, element: T) void {
             self.try_push(element) catch {
                 @panic("ArrayVec.push failed: Out of Capacity.");
@@ -80,6 +124,13 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
         /// Pushes `element` onto the array.
         /// If the array was already full,
         /// An error is returned.
+        /// # Examaples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 2);
+        /// try arrayvec.try_push(20); // succeeds
+        /// try arrayvec.try_push(30); // succeeds
+        /// try arrayvec.try_push(40); // fails
+        /// ```
         pub fn try_push(self: *Self, element: T) !void {
             if (self.len() < self.capacity()) {
                 self.push_unchecked(element);
@@ -106,8 +157,19 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
         pub fn try_insert(self: *Self, index: usize, element: T) !void {
             unreachable;
         }
-        
+
         /// Remove the last element in the array and return it.
+        /// # Examples
+        /// ```
+        /// var arrayvec = ArrayVec(i32, 10);
+        /// arrayvec.push(10);
+        /// arrayvec.push(20);
+        /// arrayvec.push(30);
+        /// debug.assert(arrayvec.pop().? == 30);
+        /// debug.assert(arrayvec.pop().? == 20);
+        /// debug.assert(arrayvec.pop().? == 10);
+        /// debug.assert(arrayvec.pop() == null);
+        /// ```
         pub fn pop(self: *Self) ?T {
             if (self.is_empty()) {
                 return null;
@@ -129,7 +191,9 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
 
         pub fn swap_pop(self: *Self, index: usize) ?T {
             var len = self.len();
-            if (index > len) { return null; }
+            if (index > len) {
+                return null;
+            }
             self.swap(index, len - 1);
             return self.pop();
         }
@@ -144,7 +208,7 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             } else {
                 var drainit = self.drain(index, index + 1);
                 var ret = drainit.next();
-                defer drainit.deinit();
+                drainit.deinit();
                 return ret;
             }
         }
@@ -155,8 +219,8 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             }
         }
 
-        pub fn truncate_with_callback(self: *Self, new_len: usize, f: fn(*T) void) void {
-            for(self.as_slice_mut()[new_len..]) |*elem| {
+        pub fn truncate_with_callback(self: *Self, new_len: usize, f: fn (*T) void) void {
+            for (self.as_slice_mut()[new_len..]) |*elem| {
                 f(elem);
             }
 
@@ -167,18 +231,20 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             self.truncate(0);
         }
 
-        pub fn clear_with_callback(self: *Self, f: fn(*T) void) void {
+        pub fn clear_with_callback(self: *Self, f: fn (*T) void) void {
             self.truncate_with_callback(0, f);
         }
 
-        pub fn retain(self: *Self, f: fn(*T) bool) void {
+        pub fn retain(self: *Self, f: fn (*T) bool) void {
             var self_len = self.len();
 
             var del: usize = 0;
 
             var i: usize = 0;
 
-            while(i < self_len): ({i += 1;}) {
+            while (i < self_len) : ({
+                i += 1;
+            }) {
                 if (!f(&self.array[i])) {
                     del += 1;
                 } else if (del > 0) {
@@ -242,9 +308,9 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
         /// and perform write actions onto the array
         /// before using the iterator.
         fn iter(self: *const Self) Iter(T, SIZE) {
-           return Iter(T, SIZE).new(self);
+            return Iter(T, SIZE).new(self);
         }
-        
+
         /// Returns an iterator that yields mutable pointers
         /// to the initialized part of the array.
         ///
@@ -263,7 +329,7 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
 }
 
 fn compile_error_if(comptime condition: bool, comptime msg: []const u8) void {
-    if(condition) {
+    if (condition) {
         @compileError(msg);
     }
 }
@@ -272,14 +338,11 @@ fn __iter__(comptime Item: type, comptime Vec: type) type {
     // `Item` should be a pointer.
     // `Vec` should be of type *ArrayVec(Item, N) OR *const ArrayVec(Item, N).
     comptime {
-        compile_error_if(
-            !std.meta.trait.is(builtin.TypeId.Pointer)(Item),
-            "Expected a Pointer for `Item`. Found `" ++ @typeName(Item) ++ "`."
-        );
+        compile_error_if(!std.meta.trait.is(builtin.TypeId.Pointer)(Item), "Expected a Pointer for `Item`. Found `" ++ @typeName(Item) ++ "`.");
 
         const item_name = switch (@typeInfo(Item)) {
             builtin.TypeId.Pointer => |ptr| @typeName(ptr.child),
-            else => unreachable
+            else => unreachable,
         };
 
         const name = switch (std.meta.trait.isConstPtr(Vec)) {
@@ -287,10 +350,7 @@ fn __iter__(comptime Item: type, comptime Vec: type) type {
             else => "*ArrayVec(" ++ item_name,
         };
 
-        compile_error_if(
-            !std.mem.eql(u8, name, @typeName(Vec)[0..name.len]),
-            "Expected type `*const ArrayVec` or `*ArrayVec`. Found `" ++ @typeName(Vec) ++ "`."
-        );
+        compile_error_if(!std.mem.eql(u8, name, @typeName(Vec)[0..name.len]), "Expected type `*const ArrayVec` or `*ArrayVec`. Found `" ++ @typeName(Vec) ++ "`.");
     }
 
     return struct {
@@ -300,9 +360,9 @@ fn __iter__(comptime Item: type, comptime Vec: type) type {
         const Self = @This();
 
         fn new(arrayvec: Vec) Self {
-            return  Self { .array = arrayvec, .index = comptime_int(0) };
+            return Self{ .array = arrayvec, .index = comptime_int(0) };
         }
-        
+
         fn next(self: *Self) ?Item {
             if (self.index < self.array.len()) {
                 var elem = &self.array.array[self.index];
@@ -331,7 +391,7 @@ fn IntoIter(comptime T: type, comptime SIZE: usize) type {
         const Self = @This();
 
         fn new(arrayvec: ArrayVec(T, SIZE)) Self {
-            return Self { .array = arrayvec, .index = comptime_int(0) };
+            return Self{ .array = arrayvec, .index = comptime_int(0) };
         }
 
         fn next(self: *Self) ?T {
@@ -343,7 +403,7 @@ fn IntoIter(comptime T: type, comptime SIZE: usize) type {
                 return null;
             }
         }
-   };
+    };
 }
 
 pub fn Drain(comptime T: type, comptime SIZE: usize) type {
@@ -356,7 +416,7 @@ pub fn Drain(comptime T: type, comptime SIZE: usize) type {
         const Self = @This();
 
         fn new(arrayvec: *ArrayVec(T, SIZE), start_param: usize, end_param: usize) Self {
-            return Self { .array = arrayvec, .real_start = start_param, .start = start_param, .end = end_param };
+            return Self{ .array = arrayvec, .real_start = start_param, .start = start_param, .end = end_param };
         }
 
         pub fn next(self: *Self) ?T {
@@ -372,14 +432,15 @@ pub fn Drain(comptime T: type, comptime SIZE: usize) type {
         fn deinit(self: *Self) void {
             // First continue iterating self.
             // then memmove the tail back to where it belongs.
-            while(self.next()) |_| {}
+            while (self.next()) |_| {}
 
             var len: usize = 0;
             var self_len = self.array.len();
 
-
-            for(self.array.as_slice_mut()[self.real_start..]) |*b, i| {
-                if (self.end + i >= self_len) { break; }
+            for (self.array.as_slice_mut()[self.real_start..]) |*b, i| {
+                if (self.end + i >= self_len) {
+                    break;
+                }
                 b.* = self.array.array[self.end + i];
                 len += 1;
             }
@@ -400,7 +461,7 @@ test "const basic functions" {
 test "const iter" {
     comptime {
         var arrayvec = ArrayVec(i32, 10).new();
-        
+
         arrayvec.push(10);
         arrayvec.push(20);
 
@@ -418,21 +479,21 @@ test "const iter" {
 test "const iter mut" {
     comptime {
         var arrayvec = ArrayVec(i32, 10).new();
-        
+
         arrayvec.push(10);
         arrayvec.push(20);
 
         var iter = arrayvec.iter_mut();
-        
-        while(iter.next()) |item| {
+
+        while (iter.next()) |item| {
             item.* *= 2;
         }
-        
+
         var iter2 = arrayvec.iter();
         debug.assert(iter2.next().?.* == 20);
         debug.assert(iter2.next().?.* == 40);
         debug.assert(iter2.next() == null);
-        
+
         debug.assert(arrayvec.pop().? == 40);
         debug.assert(arrayvec.pop().? == 20);
         debug.assert(arrayvec.pop() == null);
@@ -443,24 +504,22 @@ test "const iter mut" {
 test "const into iter" {
     comptime {
         var arrayvec = ArrayVec(i32, 10).new();
-        
+
         arrayvec.push(10);
         arrayvec.push(20);
 
         var iter = arrayvec.into_iter();
-        
+
         debug.assert(iter.next().? == 10);
         debug.assert(iter.next().? == 20);
         debug.assert(iter.next() == null);
-
     }
 }
-
 
 test "const drain" {
     comptime {
         var arrayvec = ArrayVec(i32, 10).new();
-        var array = [7]i32 {0, 1, 2, 3, 4, 5, 6};
+        var array = [7]i32{ 0, 1, 2, 3, 4, 5, 6 };
         _ = arrayvec.try_extend_from_slice(&array) catch unreachable;
 
         debug.assert(arrayvec.len() == 7);
@@ -473,7 +532,7 @@ test "const drain" {
             }
 
             debug.assert(arrayvec.len() == 6);
-            var array_after_drain_first = [6]i32 {1, 2, 3, 4, 5, 6};
+            var array_after_drain_first = [6]i32{ 1, 2, 3, 4, 5, 6 };
             debug.assert(mem.eql(i32, arrayvec.as_slice(), &array_after_drain_first));
         }
         {
@@ -487,10 +546,10 @@ test "const drain" {
             }
 
             debug.assert(arrayvec.len() == 3);
-            var array_after_drain = [3]i32 {1, 2, 6};
+            var array_after_drain = [3]i32{ 1, 2, 6 };
             debug.assert(mem.eql(i32, arrayvec.as_slice(), &array_after_drain));
         }
-        
+
         {
             var drain_last = arrayvec.drain(2, 3);
             {
@@ -499,7 +558,7 @@ test "const drain" {
                 debug.assert(drain_last.next() == null);
             }
             debug.assert(arrayvec.len() == 2);
-            var array_after_drain_last = [2]i32 {1, 2};
+            var array_after_drain_last = [2]i32{ 1, 2 };
             debug.assert(mem.eql(i32, arrayvec.as_slice(), &array_after_drain_last));
         }
     }
@@ -508,31 +567,34 @@ test "const drain" {
 test "const remove" {
     comptime {
         var arrayvec = ArrayVec(i32, 10).new();
-        var array = [6]i32 {1, 2, 3, 4, 5, 6};
+        var array = [6]i32{ 1, 2, 3, 4, 5, 6 };
         _ = arrayvec.try_extend_from_slice(&array) catch unreachable;
 
         var removed = arrayvec.remove(3);
         debug.assert(removed == 4);
 
-        var array_after_remove = [5]i32 {1, 2, 3, 5, 6};
+        var array_after_remove = [5]i32{ 1, 2, 3, 5, 6 };
         debug.assert(mem.eql(i32, arrayvec.as_slice(), &array_after_remove));
     }
 }
 
 test "const retain" {
     comptime {
-
-        const bigger_than_5 = struct { fn bigger_than_5(x: *i32) bool { return x.* > 5;} }.bigger_than_5;
+        const bigger_than_5 = struct {
+            fn bigger_than_5(x: *i32) bool {
+                return x.* > 5;
+            }
+        }.bigger_than_5;
 
         var arrayvec = ArrayVec(i32, 10).new();
-        var array = [6]i32 {1, 2, 3, 4, 5, 6};
+        var array = [6]i32{ 1, 2, 3, 4, 5, 6 };
         _ = arrayvec.try_extend_from_slice(&array) catch unreachable;
 
         arrayvec.retain(bigger_than_5);
 
         debug.assert(arrayvec.len() == 1);
 
-        var array_after_retain = [1]i32 { 6 };
+        var array_after_retain = [1]i32{6};
         debug.assert(mem.eql(i32, arrayvec.as_slice(), &array_after_retain));
     }
 }
