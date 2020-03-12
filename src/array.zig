@@ -11,6 +11,7 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             self.length = new_len;
         }
 
+        /// Returns a new, empty ArrayVec.
         pub fn new() Self {
             return Self{
                 .array = undefined,
@@ -18,32 +19,64 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             };
         }
 
+        /// Returns the length of the ArrayVec
         pub fn len(self: *const Self) usize {
             return self.length;
         }
 
+        /// Returns the capacity of the ArrayVec
         pub fn capacity(self: *const Self) usize {
             return SIZE;
         }
 
+        /// Returns a boolean indicating whether
+        /// the ArrayVec is full
         pub fn isFull(self: *const Self) bool {
             return self.len() == self.capacity();
         }
 
+        /// Returns a boolean indicating whether
+        /// the ArrayVec is empty
         pub fn isEmpty(self: *const Self) bool {
             return self.len() == 0;
         }
 
+        /// Returns the remaing capacity of the ArrayVec.
+        /// This is the number of elements remaing untill
+        /// the ArrayVec is full.
         pub fn remainingCapacity(self: *const Self) usize {
             return self.capacity() - self.len();
         }
 
+        /// Returns a const slice to the underlying memory
         pub fn asConstSlice(self: *const Self) []const T {
             return self.array[0..self.len()];
         }
 
+        /// Returns a (mutable) slice to the underlying
+        /// memory.
         pub fn asSlice(self: *Self) []T {
             return self.array[0..self.len()];
+        }
+
+        /// Truncates the ArrayVec to the new length. It is
+        /// the programmers responsability to deallocate any
+        /// truncated elements if nessecary.
+        /// Notice that truncate is lazy, and doesn't touch
+        /// any truncated elements.
+        pub fn truncate(self: *Self, new_len: usize) void {
+            if (new_len < self.len()) {
+                self.set_len(new_len);
+            }
+        }
+
+        /// Clears the entire ArrayVec. It is
+        /// the programmers responsability to deallocate the
+        /// cleared items if nessecary.
+        /// Notice that clear is lazy, and doesn't touch any
+        /// cleared items.
+        pub fn clear(self: *Self) void {
+            self.truncate(0);
         }
 
         pub fn push(self: *Self, element: T) !void {
@@ -76,6 +109,22 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
             const new_len = self.len() - 1;
             self.set_len(new_len);
             return self.array[new_len];
+        }
+
+        pub fn extend_from_slice(self: *Self, other: []const T) !void {
+            if (self.remainingCapacity() >= other.len) {
+                self.extend_from_slice_unchecked(other);
+            } else {
+                return ArrayError.CapacityError;
+            }
+        }
+
+        pub fn extend_from_slice_unchecked(self: *Self, other: []const T) void {
+            @setRuntimeSafety(false);
+            const mem = @import("std").mem;
+
+            mem.copy(T, self.array[self.length..], other);
+            self.set_len(self.length + other.len);
         }
     };
 }
@@ -144,5 +193,20 @@ test "try pop" {
         }
 
         testing.expectEqual(array.isEmpty(), true);
+    }
+}
+
+test "extend from slice" {
+    const CAP: usize = 10;
+    const SLICE = &[_]i32{ 1, 2, 3, 4, 5, 6 };
+    comptime {
+        var array = ArrayVec(i32, CAP).new();
+        try array.extend_from_slice(SLICE);
+
+        testing.expectEqual(array.len(), SLICE.len);
+
+        for (array.asConstSlice()) |elem, idx| {
+            testing.expectEqual(elem, SLICE[idx]);
+        }
     }
 }
