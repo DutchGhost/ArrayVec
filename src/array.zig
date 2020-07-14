@@ -131,7 +131,7 @@ pub fn ArrayVec(comptime T: type, comptime SIZE: usize) type {
 
 const testing = if (@import("builtin").is_test)
     struct {
-        fn expectEqual(x: var, y: var) void {
+        fn expectEqual(x: anytype, y: anytype) void {
             @import("std").debug.assert(x == y);
         }
     }
